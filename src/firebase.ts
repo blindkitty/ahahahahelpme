@@ -15,7 +15,7 @@ import type { GameState } from './game/gameLogic';
 // 2. Включите Realtime Database
 // 3. Скопируйте конфиг из настроек проекта
 const firebaseConfig = {
-  apiKey: "AIzaSyAXSEtIXcvk2YndN-U7MPlnXVqPWmYCuKE",
+  apiKey: "AIzaSyAXSEtIXcvk2YndN-U7MPlnXVqPW  mYCuKE",
   authDomain: "unoono-bdbbe.firebaseapp.com",
   databaseURL: "https://unoono-bdbbe-default-rtdb.firebaseio.com",
   projectId: "unoono-bdbbe",
