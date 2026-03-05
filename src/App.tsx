@@ -34,6 +34,14 @@ export function App() {
 
         // Если хост — инициализируем gameState и пишем в Firebase
         if (roomData.host === pid) {
+          // Если игра уже создана (пришло обновление из Firebase или реконнект), не пересоздаем
+          if (roomData.gameState) {
+            console.log('🔄 Игра уже идет, подключаемся к существующей');
+            setGameState(roomData.gameState);
+            setScreen('game');
+            return;
+          }
+
           setIsLoading(true);
 
           try {
