@@ -4,7 +4,7 @@
 
 import { initializeApp } from 'firebase/app';
 import {
-  getDatabase, ref, set, get, update, remove,
+  getDatabase, ref, set, get, update, remove, push,
   onValue, onDisconnect, off,
 } from 'firebase/database';
 import type { GameState } from './game/gameLogic';
@@ -231,3 +231,43 @@ export async function setPlayerOnline(roomCode: string, playerId: string): Promi
 }
 
 export { database };
+
+// === ЧАТ ===
+
+export interface ChatMessage {
+  id: string;
+  sender: string;
+  text: string;
+  timestamp: number;
+}
+
+// Отправить сообщение
+export async function sendChatMessage(roomCode: string, sender: string, text: string): Promise<void> {
+  const chatRef = ref(database, `rooms/${roomCode}/chat`);
+  const newMessageRef = push(chatRef);
+  await set(newMessageRef, {
+    id: newMessageRef.key,
+    sender,
+    text,
+    timestamp: Date.now(),
+  });
+}
+
+// Подписаться на чат
+export function subscribeToChat(
+  roomCode: string,
+  callback: (messages: ChatMessage[]) => void
+): UnsubscribeFn {
+  const chatRef = ref(database, `rooms/${roomCode}/chat`);
+  const listener = onValue(chatRef, (snapshot) => {
+    if (snapshot.exists()) {
+      const messagesObj = snapshot.val();
+      const messages: ChatMessage[] = Object.values(messagesObj);
+      messages.sort((a, b) => a.timestamp - b.timestamp);
+      callback(messages);
+    } else {
+      callback([]);
+    }
+  });
+  return typeof listener === 'function' ? listener : () => off(chatRef);
+}

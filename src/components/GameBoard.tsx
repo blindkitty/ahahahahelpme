@@ -15,6 +15,7 @@ import { UnoCardView } from './UnoCardView';
 import { ColorPicker } from './ColorPicker';
 import { PlayerCircle } from './PlayerCircle';
 import { AdminPanel } from './AdminPanel';
+import { Chat } from './Chat';
 import { updateGameState, subscribeToGameState } from '../firebase';
 
 interface GameBoardProps {
@@ -639,6 +640,18 @@ export function GameBoard({ roomCode, playerId, initialState, onGameEnd }: GameB
             ))}
           </div>
         </div>
+
+        {/* Chat */}
+        <Chat roomCode={roomCode} senderName={myPlayer.name} />
+
+        {/* Admin Panel */}
+        {showAdminPanel && (
+          <AdminPanel 
+            state={state} 
+            onClose={() => setShowAdminPanel(false)}
+            onAction={handleAdminAction}
+          />
+        )}
       </div>
   );
 }
