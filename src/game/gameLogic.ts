@@ -490,9 +490,6 @@ export function playUnoCard(state: GameState, playerId: string, cardId: string, 
     newState.unoState.currentPlayerIndex = getNextUnoPlayer(newState, playerIdx, skipAmount);
   }
 
-  // Сдвигаем ONO pointer
-  newState.onoState.currentPlayerIndex = getNextOnoPlayer(newState, newState.onoState.currentPlayerIndex);
-
   // Переход к фазе ONO следующего хода
   newState.phase = 'ono';
 
@@ -537,7 +534,6 @@ export function drawUnoCardAction(state: GameState, playerId: string): GameState
   }
 
   newState.unoState.currentPlayerIndex = getNextUnoPlayer(newState, playerIdx);
-  newState.onoState.currentPlayerIndex = getNextOnoPlayer(newState, newState.onoState.currentPlayerIndex);
   newState.phase = 'ono';
 
   const onoPlayer = newState.players[newState.onoState.currentPlayerIndex];
