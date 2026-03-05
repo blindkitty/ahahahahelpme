@@ -51,6 +51,7 @@ export interface GameState {
   onoRoundOver: boolean;
   waitingForColorChoice: boolean;
   gameOver: boolean;
+  turnStartTime: number; // Время начала текущего хода (timestamp)
 }
 
 // Количество начальных жизней
@@ -129,6 +130,7 @@ export function initializeGame(playerIds: string[], playerNames: string[]): Game
     onoRoundOver: false,
     waitingForColorChoice: false,
     gameOver: false,
+    turnStartTime: Date.now(),
   };
 
   return state;
@@ -301,6 +303,7 @@ export function playOnoCard(state: GameState, playerId: string, cardId: string):
     newState.onoState.doublesRemaining = 2;
     newState.phase = 'ono_double';
     newState.message += ` Ход ONO: ${newState.players[nextIdx].name} (2 карты)`;
+    newState.turnStartTime = Date.now();
     return newState;
   } else {
     newState.onoState.currentPlayerIndex = getNextOnoPlayer(newState, playerIdx);
@@ -310,6 +313,7 @@ export function playOnoCard(state: GameState, playerId: string, cardId: string):
   newState.phase = 'uno';
   const unoPlayer = newState.players[newState.unoState.currentPlayerIndex];
   newState.message += ` → Ход UNO Flip: ${unoPlayer.name}`;
+  newState.turnStartTime = Date.now();
 
   return newState;
 }
@@ -511,6 +515,7 @@ export function playUnoCard(state: GameState, playerId: string, cardId: string, 
     newState.phase = 'uno';
   }
 
+  newState.turnStartTime = Date.now();
   return newState;
 }
 
@@ -535,6 +540,7 @@ export function drawUnoCardAction(state: GameState, playerId: string): GameState
 
   const onoPlayer = newState.players[newState.onoState.currentPlayerIndex];
   newState.message += ` → Ход ONO: ${onoPlayer.name}`;
+  newState.turnStartTime = Date.now();
 
   return newState;
 }
@@ -566,6 +572,37 @@ function resetOnoRound(state: GameState) {
       p.onoHand = state.onoState.deck.splice(0, ONO_HAND_SIZE);
     }
   }
+}
+
+// === ОБРАБОТКА ТАЙМАУТА ===
+export function handleTimeout(state: GameState): GameState {
+  const newState = deepClone(state);
+  
+  // Если игра закончена, ничего не делаем
+  if (newState.gameOver || newState.phase === 'waiting') {
+    return newState;
+  }
+  
+  // Определяем следующего игрока
+  let nextIdx = newState.onoState.currentPlayerIndex;
+  
+  if (newState.phase === 'uno') {
+     nextIdx = getNextOnoPlayer(newState, newState.unoState.currentPlayerIndex);
+  } else {
+     nextIdx = getNextOnoPlayer(newState, newState.onoState.currentPlayerIndex);
+  }
+
+  newState.onoState.currentPlayerIndex = nextIdx;
+  newState.unoState.currentPlayerIndex = nextIdx;
+  
+  newState.phase = 'ono';
+  newState.onoState.doublesRemaining = 0;
+  newState.turnStartTime = Date.now();
+  
+  const nextPlayer = newState.players[nextIdx];
+  newState.message = `⏰ Время вышло! Ход переходит к ${nextPlayer.name}`;
+
+  return newState;
 }
 
 // Глубокое клонирование

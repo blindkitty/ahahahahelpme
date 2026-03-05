@@ -5,7 +5,8 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
 import {
   GameState, playOnoCard, playUnoCard, drawUnoCardAction,
-  sayUno, canPlayOnoCard, canPlayUnoCard, hasPlayableUnoCard
+  sayUno, canPlayOnoCard, canPlayUnoCard, hasPlayableUnoCard,
+  handleTimeout
 } from '../game/gameLogic';
 import { UnoColor, getActiveSide } from '../game/cards';
 import { OnoCardView } from './OnoCardView';
@@ -25,6 +26,7 @@ export function GameBoard({ roomCode, playerId, initialState, onGameEnd }: GameB
   const [state, setState] = useState<GameState | null>(initialState);  // ⬅️ ИЗМЕНЕНО: | null
   const [colorPickerCard, setColorPickerCard] = useState<string | null>(null);
   const [lastAction, setLastAction] = useState<string>('');
+  const [timeLeft, setTimeLeft] = useState<number>(15);
   const stateRef = useRef(state);
 
   // Держим актуальную ссылку на state
@@ -137,6 +139,36 @@ export function GameBoard({ roomCode, playerId, initialState, onGameEnd }: GameB
   const isMyUnoTurn = myPlayer && myPlayer.id === unoCurrentPlayer?.id
       && state.phase === 'uno';
   const isMyTurn = isMyOnoTurn || isMyUnoTurn;
+
+  // === ТАЙМЕР ХОДА ===
+  const handleTimeoutAction = useCallback(() => {
+    if (!state || !isMyTurn) return;
+    console.log('⏰ Timeout triggered by client');
+    const newState = handleTimeout(state);
+    pushState(newState);
+  }, [state, isMyTurn, pushState]);
+
+  useEffect(() => {
+    if (!state || state.gameOver || state.phase === 'waiting') {
+      setTimeLeft(15);
+      return;
+    }
+
+    const interval = setInterval(() => {
+      const now = Date.now();
+      const start = state.turnStartTime || now;
+      const elapsed = Math.floor((now - start) / 1000);
+      const remaining = Math.max(0, 15 - elapsed);
+
+      setTimeLeft(remaining);
+
+      if (remaining === 0 && isMyTurn) {
+        handleTimeoutAction();
+      }
+    }, 1000);
+
+    return () => clearInterval(interval);
+  }, [state, isMyTurn, handleTimeoutAction]);
 
   // === ОБРАБОТЧИКИ ХОДОВ ===
 
@@ -259,6 +291,9 @@ export function GameBoard({ roomCode, playerId, initialState, onGameEnd }: GameB
             <span className="w-2 h-2 rounded-full bg-green-400 animate-pulse" />
             ВАШ ХОД — {isMyOnoTurn ? 'ONO 99' : 'UNO Flip'}
                 <span className="w-2 h-2 rounded-full bg-green-400 animate-pulse" />
+                <span className={`text-xs ml-1 ${timeLeft <= 5 ? 'text-red-400 animate-pulse' : 'text-green-200'}`}>
+                  ({timeLeft}с)
+                </span>
           </span>
           ) : (
               <span>
@@ -266,6 +301,9 @@ export function GameBoard({ roomCode, playerId, initialState, onGameEnd }: GameB
                   ? `${onoCurrentPlayer?.name} (ONO)`
                   : `${unoCurrentPlayer?.name} (UNO)`
               }
+                <span className={`text-xs ml-1 ${timeLeft <= 5 ? 'text-red-400' : 'text-gray-400'}`}>
+                  ({timeLeft}с)
+                </span>
           </span>
           )}
         </div>
