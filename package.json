@@ -9,7 +9,7 @@
     "preview": "vite preview",
     "deploy": "npm run build && gh-pages -d dist"
   },
-  "homepage": "https://blindkitty.github.io/huesos",
+  "homepage": "https://blindkitty.github.io/ahahahahelpme",
   "dependencies": {
     "clsx": "2.1.1",
     "firebase": "^12.10.0",
