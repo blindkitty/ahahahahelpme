@@ -390,7 +390,18 @@ export function GameBoard({ roomCode, playerId, initialState, onGameEnd }: GameB
               : 'border-gray-800/30 bg-gray-900/10'}
           ${isMyOnoTurn ? 'ring-2 ring-green-400/30' : ''}
         `}>
-            {(state.phase === 'ono' || state.phase === 'ono_double') && (
+            {state.onoWinner && (
+              <div className="absolute inset-0 bg-black/80 flex items-center justify-center z-50 backdrop-blur-sm rounded-xl animate-in fade-in duration-500">
+                <div className="text-center p-4">
+                  <div className="text-4xl mb-2 animate-bounce">🏆</div>
+                  <div className="text-cyan-400 font-bold text-lg">ONO 99 ЗАВЕРШЕНО</div>
+                  <div className="text-white text-sm mt-1">
+                    Победитель: <span className="text-cyan-300 font-bold">{state.players.find(p => p.id === state.onoWinner)?.name}</span>
+                  </div>
+                </div>
+              </div>
+            )}
+            {(state.phase === 'ono' || state.phase === 'ono_double') && !state.onoWinner && (
                 <div className="absolute inset-0 bg-gradient-radial from-cyan-500/5 to-transparent pointer-events-none" />
             )}
 
@@ -461,7 +472,18 @@ export function GameBoard({ roomCode, playerId, initialState, onGameEnd }: GameB
               : 'border-gray-800/30 bg-gray-900/10'}
           ${isMyUnoTurn ? 'ring-2 ring-green-400/30' : ''}
         `}>
-            {state.phase === 'uno' && (
+            {state.unoWinner && (
+              <div className="absolute inset-0 bg-black/80 flex items-center justify-center z-50 backdrop-blur-sm rounded-xl animate-in fade-in duration-500">
+                <div className="text-center p-4">
+                  <div className="text-4xl mb-2 animate-bounce">🏆</div>
+                  <div className="text-rose-400 font-bold text-lg">UNO FLIP ЗАВЕРШЕНО</div>
+                  <div className="text-white text-sm mt-1">
+                    Победитель: <span className="text-rose-300 font-bold">{state.players.find(p => p.id === state.unoWinner)?.name}</span>
+                  </div>
+                </div>
+              </div>
+            )}
+            {state.phase === 'uno' && !state.unoWinner && (
                 <div className="absolute inset-0 bg-gradient-radial from-rose-500/5 to-transparent pointer-events-none" />
             )}
 

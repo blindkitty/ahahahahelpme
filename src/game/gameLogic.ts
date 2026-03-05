@@ -46,7 +46,9 @@ export interface GameState {
   onoState: OnoState;
   unoState: UnoState;
   turnOrder: string[]; // порядок по кругу (id игроков)
-  winner: string | null; // id победителя
+  winner: string | null; // общий победитель (когда оба режима завершены)
+  onoWinner: string | null; // победитель в ONO 99
+  unoWinner: string | null; // победитель в UNO Flip
   message: string; // сообщение для UI
   onoRoundOver: boolean;
   waitingForColorChoice: boolean;
@@ -127,6 +129,8 @@ export function initializeGame(playerIds: string[], playerNames: string[]): Game
     },
     turnOrder,
     winner: null,
+    onoWinner: null,
+    unoWinner: null,
     message: `Ход ONO 99: ${players[0].name}`,
     onoRoundOver: false,
     waitingForColorChoice: false,
@@ -275,15 +279,41 @@ export function playOnoCard(state: GameState, playerId: string, cardId: string):
 
     const alivePlayers = newState.players.filter(p => p.isAlive);
     if (alivePlayers.length <= 1) {
-      newState.gameOver = true;
-      newState.winner = alivePlayers[0]?.id || null;
+      // 🏆 ПОБЕДА В ONO
+      newState.onoWinner = alivePlayers[0]?.id || null;
       newState.message = `🏆 ${alivePlayers[0]?.name || 'Никто'} победил в ONO 99!`;
-      newState.phase = 'waiting';
-      return newState;
+      
+      if (newState.unoWinner) {
+        // Если и UNO уже выиграно -> КОНЕЦ ИГРЫ
+        newState.gameOver = true;
+        newState.winner = newState.onoWinner; // Последний победитель
+        newState.phase = 'waiting';
+        return newState;
+      } else {
+        // Иначе продолжаем только UNO
+        newState.message += " Игра продолжается в UNO Flip!";
+        // Переходим к фазе UNO, так как ONO завершено
+        newState.phase = 'uno';
+        const unoPlayer = newState.players[newState.unoState.currentPlayerIndex];
+        newState.message += ` → Ход UNO Flip: ${unoPlayer.name}`;
+        newState.turnStartTime = Date.now();
+        return newState;
+      }
     }
 
     resetOnoRound(newState);
-    newState.phase = 'uno';
+    
+    // Если UNO уже выиграно, остаемся в ONO
+    if (newState.unoWinner) {
+        newState.phase = 'ono';
+        const nextOnoPlayer = newState.players[newState.onoState.currentPlayerIndex];
+        newState.message += ` → Ход ONO 99: ${nextOnoPlayer.name}`;
+    } else {
+        newState.phase = 'uno';
+        const unoPlayer = newState.players[newState.unoState.currentPlayerIndex];
+        newState.message += ` → Ход UNO Flip: ${unoPlayer.name}`;
+    }
+    
     return newState;
   }
 
@@ -311,10 +341,19 @@ export function playOnoCard(state: GameState, playerId: string, cardId: string):
     newState.onoState.currentPlayerIndex = getNextOnoPlayer(newState, playerIdx);
   }
 
-  // Переход к фазе UNO
-  newState.phase = 'uno';
-  const unoPlayer = newState.players[newState.unoState.currentPlayerIndex];
-  newState.message += ` → Ход UNO Flip: ${unoPlayer.name}`;
+  // Переход к следующей фазе
+  if (newState.unoWinner) {
+      // Если UNO выиграно -> остаемся в ONO
+      newState.phase = 'ono';
+      const nextOnoPlayer = newState.players[newState.onoState.currentPlayerIndex];
+      newState.message += ` → Ход ONO 99: ${nextOnoPlayer.name}`;
+  } else {
+      // Иначе переходим к UNO
+      newState.phase = 'uno';
+      const unoPlayer = newState.players[newState.unoState.currentPlayerIndex];
+      newState.message += ` → Ход UNO Flip: ${unoPlayer.name}`;
+  }
+
   newState.turnStartTime = Date.now();
 
   return newState;
@@ -386,11 +425,31 @@ export function playUnoCard(state: GameState, playerId: string, cardId: string, 
   }
 
   if (player.unoHand.length === 0) {
-    newState.gameOver = true;
-    newState.winner = player.id;
+    // 🏆 ПОБЕДА В UNO
+    newState.unoWinner = player.id;
     newState.message = `🏆 ${player.name} победил в UNO Flip!`;
-    newState.phase = 'waiting';
-    return newState;
+    
+    if (newState.onoWinner) {
+      // Если и ONO уже выиграно -> КОНЕЦ ИГРЫ
+      newState.gameOver = true;
+      newState.winner = player.id;
+      newState.phase = 'waiting';
+      return newState;
+    } else {
+       // Иначе продолжаем только ONO
+       newState.message += " Игра продолжается в ONO 99!";
+       newState.phase = 'ono';
+       const onoPlayer = newState.players[newState.onoState.currentPlayerIndex];
+       newState.message += ` → Ход ONO 99: ${onoPlayer.name}`;
+       
+       // Проверка играбельности ONO
+       if (!hasPlayableOnoCard(onoPlayer, newState.onoState.counter)) {
+         handleOnoDeath(newState, onoPlayer);
+       }
+       
+       newState.turnStartTime = Date.now();
+       return newState;
+    }
   }
 
   let skipAmount = 1;
@@ -490,32 +549,79 @@ export function playUnoCard(state: GameState, playerId: string, cardId: string, 
     newState.unoState.currentPlayerIndex = getNextUnoPlayer(newState, playerIdx, skipAmount);
   }
 
-  // Переход к фазе ONO следующего хода
-  newState.phase = 'ono';
+  // Переход к следующей фазе
+  if (newState.onoWinner) {
+      // Если ONO выиграно -> остаемся в UNO
+      newState.phase = 'uno';
+      const nextUnoPlayer = newState.players[newState.unoState.currentPlayerIndex];
+      newState.message += ` → Ход UNO Flip: ${nextUnoPlayer.name}`;
+  } else {
+      // Иначе переходим к ONO
+      newState.phase = 'ono';
+      const onoPlayer = newState.players[newState.onoState.currentPlayerIndex];
+      newState.message += ` → Ход ONO: ${onoPlayer.name}`;
 
-  const onoPlayer = newState.players[newState.onoState.currentPlayerIndex];
-  newState.message += ` → Ход ONO: ${onoPlayer.name}`;
-
-  // Проверяем может ли ONO-игрок сыграть
-  if (!hasPlayableOnoCard(onoPlayer, newState.onoState.counter)) {
-    onoPlayer.lives--;
-    newState.message = `💀 ${onoPlayer.name} не может сыграть в ONO 99! Потерял жизнь.`;
-    if (onoPlayer.lives <= 0) {
-      onoPlayer.isAlive = false;
-    }
-    const alivePlayers = newState.players.filter(p => p.isAlive);
-    if (alivePlayers.length <= 1) {
-      newState.gameOver = true;
-      newState.winner = alivePlayers[0]?.id || null;
-      newState.phase = 'waiting';
-      return newState;
-    }
-    resetOnoRound(newState);
-    newState.phase = 'uno';
+      // Проверяем может ли ONO-игрок сыграть
+      if (!hasPlayableOnoCard(onoPlayer, newState.onoState.counter)) {
+        handleOnoDeath(newState, onoPlayer);
+      }
   }
 
   newState.turnStartTime = Date.now();
   return newState;
+}
+
+// Вынесли логику смерти в отдельную функцию, чтобы не дублировать
+function handleOnoDeath(state: GameState, player: Player) {
+    player.lives--;
+    state.message = `💀 ${player.name} не может сыграть в ONO 99! Потерял жизнь.`;
+    if (player.lives <= 0) {
+      player.isAlive = false;
+      state.message += ` — ${player.name} выбывает из ONO 99!`;
+    }
+    const alivePlayers = state.players.filter(p => p.isAlive);
+    if (alivePlayers.length <= 1) {
+      // 🏆 ПОБЕДА В ONO (повторная логика, можно вынести, но пока так)
+      state.onoWinner = alivePlayers[0]?.id || null;
+      state.message = `🏆 ${alivePlayers[0]?.name || 'Никто'} победил в ONO 99!`;
+      
+      if (state.unoWinner) {
+        state.gameOver = true;
+        state.winner = state.onoWinner;
+        state.phase = 'waiting';
+      } else {
+        state.message += " Игра продолжается в UNO Flip!";
+        // Переходим обратно в UNO? 
+        // Мы пришли из UNO -> хотели в ONO -> умерли -> ONO закончилось -> надо в UNO.
+        state.phase = 'uno';
+        const nextUnoPlayer = state.players[state.unoState.currentPlayerIndex]; // тот кто только что походил в UNO?
+        // Нет, currentPlayerIndex в UNO уже сдвинут. Значит следующий.
+        state.message += ` → Ход UNO Flip: ${nextUnoPlayer.name}`;
+      }
+      return;
+    }
+    
+    resetOnoRound(state);
+    
+    // Если мы "умерли" и раунд сбросился, но игра продолжается:
+    // Мы должны остаться в ONO или вернуться в UNO?
+    // Обычно после сброса раунда ONO мы идем в UNO.
+    // Если UNO выиграно -> остаемся в ONO.
+    if (state.unoWinner) {
+         state.phase = 'ono';
+         // Следующий игрок ONO?
+         // Если текущий игрок умер, но не выбыл (lives > 0), он продолжает?
+         // Если выбыл, то getNextOnoPlayer его пропустит.
+         // Но мы уже установили currentPlayerIndex для ONO до вызова этой функции (в playUnoCard не устанавливали, он остался прежним).
+         // Если игрок выбыл, нужно сдвинуть currentPlayerIndex.
+         if (!player.isAlive) {
+             state.onoState.currentPlayerIndex = getNextOnoPlayer(state, state.onoState.currentPlayerIndex);
+         }
+         const nextOnoPlayer = state.players[state.onoState.currentPlayerIndex];
+         state.message += ` → Ход ONO 99: ${nextOnoPlayer.name}`;
+    } else {
+        state.phase = 'uno';
+    }
 }
 
 // === ВЗЯТЬ КАРТУ UNO ===
@@ -534,10 +640,23 @@ export function drawUnoCardAction(state: GameState, playerId: string): GameState
   }
 
   newState.unoState.currentPlayerIndex = getNextUnoPlayer(newState, playerIdx);
-  newState.phase = 'ono';
+  
+  if (newState.onoWinner) {
+      // Если ONO выиграно -> остаемся в UNO
+      newState.phase = 'uno';
+      const nextUnoPlayer = newState.players[newState.unoState.currentPlayerIndex];
+      newState.message += ` → Ход UNO Flip: ${nextUnoPlayer.name}`;
+  } else {
+      newState.phase = 'ono';
+      const onoPlayer = newState.players[newState.onoState.currentPlayerIndex];
+      newState.message += ` → Ход ONO: ${onoPlayer.name}`;
+      
+      // Проверяем может ли ONO-игрок сыграть
+      if (!hasPlayableOnoCard(onoPlayer, newState.onoState.counter)) {
+        handleOnoDeath(newState, onoPlayer);
+      }
+  }
 
-  const onoPlayer = newState.players[newState.onoState.currentPlayerIndex];
-  newState.message += ` → Ход ONO: ${onoPlayer.name}`;
   newState.turnStartTime = Date.now();
 
   return newState;
@@ -576,30 +695,48 @@ function resetOnoRound(state: GameState) {
 export function handleTimeout(state: GameState): GameState {
   const newState = deepClone(state);
   
-  // Если игра закончена, ничего не делаем
   if (newState.gameOver || newState.phase === 'waiting') {
     return newState;
   }
   
-  // Определяем следующего игрока
-  let nextIdx = newState.onoState.currentPlayerIndex;
-  
   if (newState.phase === 'uno') {
-     nextIdx = getNextOnoPlayer(newState, newState.unoState.currentPlayerIndex);
+      // Таймаут в UNO
+      // Передаем ход следующему
+      newState.unoState.currentPlayerIndex = getNextUnoPlayer(newState, newState.unoState.currentPlayerIndex);
+      
+      // Следующая фаза
+      if (newState.onoWinner) {
+          newState.phase = 'uno';
+          const nextPlayer = newState.players[newState.unoState.currentPlayerIndex];
+          newState.message = `⏰ Время вышло! Ход UNO Flip переходит к ${nextPlayer.name}`;
+      } else {
+          newState.phase = 'ono';
+          const onoPlayer = newState.players[newState.onoState.currentPlayerIndex];
+          newState.message = `⏰ Время вышло! Ход ONO 99 переходит к ${onoPlayer.name}`;
+          
+          if (!hasPlayableOnoCard(onoPlayer, newState.onoState.counter)) {
+            handleOnoDeath(newState, onoPlayer);
+          }
+      }
   } else {
-     nextIdx = getNextOnoPlayer(newState, newState.onoState.currentPlayerIndex);
+      // Таймаут в ONO
+      // Передаем ход следующему
+      newState.onoState.currentPlayerIndex = getNextOnoPlayer(newState, newState.onoState.currentPlayerIndex);
+      newState.onoState.doublesRemaining = 0; // Сбрасываем double
+      
+      // Следующая фаза
+      if (newState.unoWinner) {
+          newState.phase = 'ono';
+          const nextPlayer = newState.players[newState.onoState.currentPlayerIndex];
+          newState.message = `⏰ Время вышло! Ход ONO 99 переходит к ${nextPlayer.name}`;
+      } else {
+          newState.phase = 'uno';
+          const unoPlayer = newState.players[newState.unoState.currentPlayerIndex];
+          newState.message = `⏰ Время вышло! Ход UNO Flip переходит к ${unoPlayer.name}`;
+      }
   }
 
-  newState.onoState.currentPlayerIndex = nextIdx;
-  newState.unoState.currentPlayerIndex = nextIdx;
-  
-  newState.phase = 'ono';
-  newState.onoState.doublesRemaining = 0;
   newState.turnStartTime = Date.now();
-  
-  const nextPlayer = newState.players[nextIdx];
-  newState.message = `⏰ Время вышло! Ход переходит к ${nextPlayer.name}`;
-
   return newState;
 }
 
@@ -632,10 +769,23 @@ export function adminKillPlayer(state: GameState, targetPlayerId: string): GameS
     // Проверка победы и передача хода
     const alivePlayers = newState.players.filter(p => p.isAlive);
     if (alivePlayers.length <= 1) {
-      newState.gameOver = true;
-      newState.winner = alivePlayers[0]?.id || null;
-      newState.phase = 'waiting';
-      return newState;
+      // 🏆 ПОБЕДА В ONO
+      newState.onoWinner = alivePlayers[0]?.id || null;
+      newState.message = `🏆 ${alivePlayers[0]?.name || 'Никто'} победил в ONO 99!`;
+      
+      if (newState.unoWinner) {
+        newState.gameOver = true;
+        newState.winner = newState.onoWinner;
+        newState.phase = 'waiting';
+        return newState;
+      } else {
+        newState.message += " Игра продолжается в UNO Flip!";
+        newState.phase = 'uno';
+        const unoPlayer = newState.players[newState.unoState.currentPlayerIndex];
+        newState.message += ` → Ход UNO Flip: ${unoPlayer.name}`;
+        newState.turnStartTime = Date.now();
+        return newState;
+      }
     }
     
     // Если кикнутый был активным, передаем ход
