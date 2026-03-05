@@ -6,13 +6,15 @@ import { useState, useEffect, useCallback, useRef } from 'react';
 import {
   GameState, playOnoCard, playUnoCard, drawUnoCardAction,
   sayUno, canPlayOnoCard, canPlayUnoCard, hasPlayableUnoCard,
-  handleTimeout
+  handleTimeout,
+  adminChangeName, adminKillPlayer, adminRestartGame, adminSkipTurn
 } from '../game/gameLogic';
 import { UnoColor, getActiveSide } from '../game/cards';
 import { OnoCardView } from './OnoCardView';
 import { UnoCardView } from './UnoCardView';
 import { ColorPicker } from './ColorPicker';
 import { PlayerCircle } from './PlayerCircle';
+import { AdminPanel } from './AdminPanel';
 import { updateGameState, subscribeToGameState } from '../firebase';
 
 interface GameBoardProps {
@@ -27,6 +29,7 @@ export function GameBoard({ roomCode, playerId, initialState, onGameEnd }: GameB
   const [colorPickerCard, setColorPickerCard] = useState<string | null>(null);
   const [lastAction, setLastAction] = useState<string>('');
   const [timeLeft, setTimeLeft] = useState<number>(15);
+  const [showAdminPanel, setShowAdminPanel] = useState(false);
   const stateRef = useRef(state);
 
   // Держим актуальную ссылку на state
@@ -253,6 +256,29 @@ export function GameBoard({ roomCode, playerId, initialState, onGameEnd }: GameB
     pushState(newState);
   }, [state, playerId, pushState]);
 
+  // === АДМИНСКИЕ ДЕЙСТВИЯ ===
+  const handleAdminAction = useCallback((action: string, payload: any) => {
+    if (!state) return;
+    
+    let newState = state;
+    switch (action) {
+      case 'changeName':
+        newState = adminChangeName(state, payload.playerId, payload.newName);
+        break;
+      case 'killPlayer':
+        newState = adminKillPlayer(state, payload.playerId);
+        break;
+      case 'restartGame':
+        newState = adminRestartGame(state);
+        break;
+      case 'skipTurn':
+        newState = adminSkipTurn(state);
+        break;
+    }
+    
+    pushState(newState);
+  }, [state, pushState]);
+
   // Кнопка UNO показывается когда у игрока 2 карты UNO (перед ходом) или 1 (после хода)
   const showUnoButton = myPlayer && (
       (myPlayer.unoHand.length === 2 && isMyUnoTurn) ||
@@ -273,6 +299,15 @@ export function GameBoard({ roomCode, playerId, initialState, onGameEnd }: GameB
   // === ОСНОВНОЙ РЕНДЕР ===
   return (
       <div className="min-h-screen bg-gray-950 text-white flex flex-col">
+        {/* Админ-панель */}
+        {showAdminPanel && state && (
+          <AdminPanel 
+            state={state} 
+            onAction={handleAdminAction} 
+            onClose={() => setShowAdminPanel(false)} 
+          />
+        )}
+
         {/* Модалка выбора цвета */}
         {colorPickerCard && (
             <ColorPicker side={state.unoState.side} onSelect={handleColorSelect} />
@@ -514,6 +549,16 @@ export function GameBoard({ roomCode, playerId, initialState, onGameEnd }: GameB
                   <span className="text-[8px] bg-gray-700/30 text-gray-500 px-1.5 py-0.5 rounded-sm border border-gray-700/30">
                 ожидание...
               </span>
+              )}
+              
+              {/* Кнопка админа */}
+              {state.hostId === playerId && (
+                <button
+                  onClick={() => setShowAdminPanel(true)}
+                  className="bg-red-900/50 text-red-400 border border-red-800/50 px-2 py-0.5 rounded text-[10px] hover:bg-red-800/50 transition flex items-center gap-1"
+                >
+                  👮 ADMIN
+                </button>
               )}
             </div>
 
